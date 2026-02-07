@@ -17,4 +17,4 @@ jobs:
             echo "KEEPALIVE_URL secret is not set" >&2
             exit 1
           fi
-          curl --fail --silent --show-error "$KEEPALIVE_URL"
+          curl --fail --silent --show-error -H "User-Agent: GitHubAction" "$KEEPALIVE_URL"
