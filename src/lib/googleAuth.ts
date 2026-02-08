@@ -11,10 +11,40 @@ const SCOPES = [
   "https://www.googleapis.com/auth/photoslibrary",
 ];
 
+function getGoogleRedirectUri() {
+  const direct = process.env.GOOGLE_REDIRECT_URI?.trim();
+  if (direct) {
+    return direct;
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (appUrl) {
+    return new URL("/api/auth/callback", appUrl).toString();
+  }
+
+  throw new Error("Missing GOOGLE_REDIRECT_URI and NEXT_PUBLIC_APP_URL");
+}
+
+function getGoogleClientId() {
+  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  if (!clientId) {
+    throw new Error("Missing GOOGLE_CLIENT_ID");
+  }
+  return clientId;
+}
+
+function getGoogleClientSecret() {
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+  if (!clientSecret) {
+    throw new Error("Missing GOOGLE_CLIENT_SECRET");
+  }
+  return clientSecret;
+}
+
 export function buildGoogleAuthUrl(state: string) {
   const params = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID || "",
-    redirect_uri: process.env.GOOGLE_REDIRECT_URI || "",
+    client_id: getGoogleClientId(),
+    redirect_uri: getGoogleRedirectUri(),
     response_type: "code",
     scope: SCOPES.join(" "),
     access_type: "offline",
@@ -41,9 +71,9 @@ export type GoogleTokenInfo = {
 export async function exchangeCodeForTokens(code: string) {
   const body = new URLSearchParams({
     code,
-    client_id: process.env.GOOGLE_CLIENT_ID || "",
-    client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
-    redirect_uri: process.env.GOOGLE_REDIRECT_URI || "",
+    client_id: getGoogleClientId(),
+    client_secret: getGoogleClientSecret(),
+    redirect_uri: getGoogleRedirectUri(),
     grant_type: "authorization_code",
   });
 
@@ -65,8 +95,8 @@ export async function exchangeCodeForTokens(code: string) {
 
 export async function refreshAccessToken(refreshToken: string) {
   const body = new URLSearchParams({
-    client_id: process.env.GOOGLE_CLIENT_ID || "",
-    client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+    client_id: getGoogleClientId(),
+    client_secret: getGoogleClientSecret(),
     refresh_token: refreshToken,
     grant_type: "refresh_token",
   });
