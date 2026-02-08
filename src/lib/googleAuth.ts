@@ -26,7 +26,8 @@ function getGoogleRedirectUri() {
 }
 
 function getGoogleClientId() {
-  const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  const clientId =
+    process.env.GOOGLE_CLIENT_ID?.trim() || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID?.trim();
   if (!clientId) {
     throw new Error("Missing GOOGLE_CLIENT_ID");
   }
