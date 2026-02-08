@@ -7,24 +7,40 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const STATE_COOKIE = "pwo_oauth_state";
 
+function getAppOrigin(fallbackOrigin: string) {
+  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (configuredUrl) {
+    try {
+      return new URL(configuredUrl).origin;
+    } catch (error) {
+      console.warn("Invalid NEXT_PUBLIC_APP_URL; falling back to request origin", {
+        configuredUrl,
+        error,
+      });
+    }
+  }
+  return fallbackOrigin;
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  const appOrigin = getAppOrigin(url.origin);
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const error = url.searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(new URL("/login?error=oauth", url.origin));
+    return NextResponse.redirect(new URL("/login?error=oauth", appOrigin));
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(new URL("/login?error=missing", url.origin));
+    return NextResponse.redirect(new URL("/login?error=missing", appOrigin));
   }
 
   const store = await cookies();
   const expectedState = store.get(STATE_COOKIE)?.value;
   if (!expectedState || expectedState !== state) {
-    return NextResponse.redirect(new URL("/login?error=state", url.origin));
+    return NextResponse.redirect(new URL("/login?error=state", appOrigin));
   }
 
   store.set(STATE_COOKIE, "", {
@@ -128,9 +144,9 @@ export async function GET(request: Request) {
 
     await setSessionCookie(sessionToken);
 
-    return NextResponse.redirect(new URL("/collections", url.origin));
+    return NextResponse.redirect(new URL("/collections", appOrigin));
   } catch (err) {
     console.error(err);
-    return NextResponse.redirect(new URL("/login?error=failed", url.origin));
+    return NextResponse.redirect(new URL("/login?error=failed", appOrigin));
   }
 }
