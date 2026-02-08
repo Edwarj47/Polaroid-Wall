@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 
 import { exchangeCodeForTokens, fetchGoogleUserInfo, fetchTokenInfo } from "@/lib/googleAuth";
 import { createSessionToken, setSessionCookie } from "@/lib/session";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
 
 const STATE_COOKIE = "pwo_oauth_state";
 
@@ -19,6 +18,32 @@ function getAppOrigin(fallbackOrigin: string) {
   return fallbackOrigin;
 }
 
+function mapCallbackError(error: unknown) {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+
+  if (message.includes("missing supabase env vars")) {
+    return "missing_supabase_env";
+  }
+
+  if (message.includes("google_client_secret")) {
+    return "missing_google_client_secret";
+  }
+
+  if (message.includes("google_client_id")) {
+    return "missing_google_client_id";
+  }
+
+  if (message.includes("token exchange failed")) {
+    return "token_exchange_failed";
+  }
+
+  if (message.includes("missing refresh token")) {
+    return "missing_refresh_token";
+  }
+
+  return "unknown";
+}
+
 export async function GET(request: Request) {
   let appOrigin = process.env.NEXT_PUBLIC_APP_URL || "";
 
@@ -30,17 +55,17 @@ export async function GET(request: Request) {
     const error = url.searchParams.get("error");
 
     if (error) {
-      return NextResponse.redirect(new URL("/login?error=oauth", appOrigin));
+      return NextResponse.redirect(new URL("/?error=oauth", appOrigin));
     }
 
     if (!code || !state) {
-      return NextResponse.redirect(new URL("/login?error=missing", appOrigin));
+      return NextResponse.redirect(new URL("/?error=missing", appOrigin));
     }
 
     const store = await cookies();
     const expectedState = store.get(STATE_COOKIE)?.value;
     if (!expectedState || expectedState !== state) {
-      return NextResponse.redirect(new URL("/login?error=state", appOrigin));
+      return NextResponse.redirect(new URL("/?error=state", appOrigin));
     }
 
     store.set(STATE_COOKIE, "", {
@@ -50,6 +75,8 @@ export async function GET(request: Request) {
       path: "/",
       maxAge: 0,
     });
+    const { supabaseAdmin } = await import("@/lib/supabaseAdmin");
+
     const tokens = await exchangeCodeForTokens(code);
     const tokenInfo = await fetchTokenInfo(tokens.access_token);
     const grantedScopes = new Set((tokenInfo.scope || "").split(" ").filter(Boolean));
@@ -145,7 +172,10 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/collections", appOrigin));
   } catch (err) {
     const fallbackOrigin = getAppOrigin("http://localhost:3000");
+    const reason = mapCallbackError(err);
     console.error("OAuth callback failed", err);
-    return NextResponse.redirect(new URL("/login?error=failed", appOrigin || fallbackOrigin));
+    return NextResponse.redirect(
+      new URL(`/?error=callback&reason=${reason}`, appOrigin || fallbackOrigin)
+    );
   }
 }
