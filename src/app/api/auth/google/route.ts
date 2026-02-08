@@ -2,8 +2,6 @@ import crypto from "crypto";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { buildGoogleAuthUrl } from "@/lib/googleAuth";
-
 const STATE_COOKIE = "pwo_oauth_state";
 
 function mapConfigError(error: unknown) {
@@ -11,6 +9,10 @@ function mapConfigError(error: unknown) {
 
   if (message.includes("google_client_id")) {
     return "missing_google_client_id";
+  }
+
+  if (message.includes("google_client_secret")) {
+    return "missing_google_client_secret";
   }
 
   if (message.includes("next_public_app_url")) {
@@ -28,8 +30,28 @@ function mapConfigError(error: unknown) {
   return "unknown";
 }
 
-export async function GET() {
+function resolveOrigin(request: Request) {
+  const configured = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (configured) {
+    try {
+      return new URL(configured).origin;
+    } catch {
+      console.warn("Invalid NEXT_PUBLIC_APP_URL; falling back to request origin");
+    }
+  }
+
   try {
+    return new URL(request.url).origin;
+  } catch {
+    return "http://localhost:3000";
+  }
+}
+
+export async function GET(request: Request) {
+  const origin = resolveOrigin(request);
+
+  try {
+    const { buildGoogleAuthUrl } = await import("@/lib/googleAuth");
     const state = crypto.randomUUID();
     const store = await cookies();
     store.set(STATE_COOKIE, state, {
@@ -42,9 +64,13 @@ export async function GET() {
     const authUrl = buildGoogleAuthUrl(state);
     return NextResponse.redirect(authUrl);
   } catch (error) {
-    const origin = process.env.NEXT_PUBLIC_APP_URL?.trim() || "http://localhost:3000";
     const reason = mapConfigError(error);
     console.error("Failed to build Google auth URL", error);
-    return NextResponse.redirect(new URL(`/?error=config&reason=${reason}`, origin));
+
+    try {
+      return NextResponse.redirect(new URL(`/?error=config&reason=${reason}`, origin));
+    } catch {
+      return NextResponse.json({ error: "config", reason }, { status: 500 });
+    }
   }
 }
