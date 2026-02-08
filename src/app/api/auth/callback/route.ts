@@ -12,46 +12,44 @@ function getAppOrigin(fallbackOrigin: string) {
   if (configuredUrl) {
     try {
       return new URL(configuredUrl).origin;
-    } catch (error) {
-      console.warn("Invalid NEXT_PUBLIC_APP_URL; falling back to request origin", {
-        configuredUrl,
-        error,
-      });
+    } catch {
+      console.warn("Invalid NEXT_PUBLIC_APP_URL; falling back to request origin");
     }
   }
   return fallbackOrigin;
 }
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const appOrigin = getAppOrigin(url.origin);
-  const code = url.searchParams.get("code");
-  const state = url.searchParams.get("state");
-  const error = url.searchParams.get("error");
-
-  if (error) {
-    return NextResponse.redirect(new URL("/login?error=oauth", appOrigin));
-  }
-
-  if (!code || !state) {
-    return NextResponse.redirect(new URL("/login?error=missing", appOrigin));
-  }
-
-  const store = await cookies();
-  const expectedState = store.get(STATE_COOKIE)?.value;
-  if (!expectedState || expectedState !== state) {
-    return NextResponse.redirect(new URL("/login?error=state", appOrigin));
-  }
-
-  store.set(STATE_COOKIE, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 0,
-  });
+  let appOrigin = process.env.NEXT_PUBLIC_APP_URL || "";
 
   try {
+    const url = new URL(request.url);
+    appOrigin = getAppOrigin(url.origin);
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
+    const error = url.searchParams.get("error");
+
+    if (error) {
+      return NextResponse.redirect(new URL("/login?error=oauth", appOrigin));
+    }
+
+    if (!code || !state) {
+      return NextResponse.redirect(new URL("/login?error=missing", appOrigin));
+    }
+
+    const store = await cookies();
+    const expectedState = store.get(STATE_COOKIE)?.value;
+    if (!expectedState || expectedState !== state) {
+      return NextResponse.redirect(new URL("/login?error=state", appOrigin));
+    }
+
+    store.set(STATE_COOKIE, "", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 0,
+    });
     const tokens = await exchangeCodeForTokens(code);
     const tokenInfo = await fetchTokenInfo(tokens.access_token);
     const grantedScopes = new Set((tokenInfo.scope || "").split(" ").filter(Boolean));
@@ -146,7 +144,8 @@ export async function GET(request: Request) {
 
     return NextResponse.redirect(new URL("/collections", appOrigin));
   } catch (err) {
-    console.error(err);
-    return NextResponse.redirect(new URL("/login?error=failed", appOrigin));
+    const fallbackOrigin = getAppOrigin("http://localhost:3000");
+    console.error("OAuth callback failed", err);
+    return NextResponse.redirect(new URL("/login?error=failed", appOrigin || fallbackOrigin));
   }
 }
